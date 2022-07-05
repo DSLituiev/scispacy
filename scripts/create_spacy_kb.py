@@ -7,24 +7,27 @@ from spacy.kb import KnowledgeBase as SpacyKnowledgeBase
 from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 
-from scispacy.linking_utils import (
-    KnowledgeBase as ScispacyKnowledgeBase,
-    DEFAULT_UMLS_PATH,
+from scispacy.candidate_generation import (
+    DEFAULT_KNOWLEDGE_BASES,
 )
 
 
-def main(kb_path: str, vocab_model_path: str, output_path: str, device: str):
-    scispacy_kb = ScispacyKnowledgeBase(kb_path)
+def main(
+    kb_name: str,
+    encoding_model_name: str,
+    vocab_model_path: str,
+    output_path: str,
+    device: str,
+):
+    scispacy_kb = DEFAULT_KNOWLEDGE_BASES[kb_name]()
     nlp = spacy.load(vocab_model_path)
 
     spacy_kb = SpacyKnowledgeBase(vocab=nlp.vocab, entity_vector_length=768)
 
     description_encoder_tokenizer = AutoTokenizer.from_pretrained(
-        "michiyasunaga/BioLinkBERT-base", model_max_length=512
+        encoding_model_name, model_max_length=512
     )
-    description_encoder_model = AutoModel.from_pretrained(
-        "michiyasunaga/BioLinkBERT-base"
-    )
+    description_encoder_model = AutoModel.from_pretrained(encoding_model_name)
     description_encoder_model.to(device)
 
     entity_ids = []
@@ -71,10 +74,16 @@ def main(kb_path: str, vocab_model_path: str, output_path: str, device: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--kb_path",
-        help="Path to the scispacy KB file.",
+        "--kb_name",
+        help="Name of which scispacy kb to use",
         type=str,
-        default=DEFAULT_UMLS_PATH,
+        default="umls",
+    )
+    parser.add_argument(
+        "--encoding_model_name",
+        help="Name of the encoding model.",
+        type=str,
+        default="michiyasunaga/BioLinkBERT-base",
     )
     parser.add_argument(
         "--vocab_model_path",
@@ -90,4 +99,10 @@ if __name__ == "__main__":
     parser.add_argument("--device", help="Device to use.", type=str, default="cpu")
 
     args = parser.parse_args()
-    main(args.kb_path, args.vocab_model_path, args.output_path, args.device)
+    main(
+        args.kb_name,
+        args.encoding_model_name,
+        args.vocab_model_path,
+        args.output_path,
+        args.device,
+    )
