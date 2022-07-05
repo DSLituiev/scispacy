@@ -4,6 +4,7 @@ description: "All the steps needed in the scispaCy pipeline"
 vars:
   version_string: "0.6.0"
   gpu_id: 0
+  device: "cuda:${gpu_id}"
   freqs_loc_s3: "s3://ai2-s2-scispacy/data/gorc_subset.freqs"
   freqs_loc_local: "assets/gorc_subset.freqs"
   vectors_loc_s3: "s3://ai2-s2-scispacy/data/pubmed_with_header.txt.gz"
@@ -66,6 +67,10 @@ vars:
   package_bionlp13cg_loc: "packages/en_ner_bionlp13cg_md-${vars.version_string}/en_ner_bionlp13cg_md/en_ner_bionlp13cg_md-${vars.version_string}"
   package_craft_loc: "packages/en_ner_craft_md-${vars.version_string}/en_ner_craft_md/en_ner_craft_md-${vars.version_string}"
   package_jnlpba_loc: "packages/en_ner_jnlpba_md-${vars.version_string}/en_ner_jnlpba_md/en_ner_jnlpba_md-${vars.version_string}"
+  umls_kb_output_path: "output/umls_spacy_kb"
+  kb_encoding_model_name: "michiyasunaga/BioLinkBERT-base"
+  nel_config_loc: "configs/base_nel.cfg"
+  nel_lg_loc: "output/en_nel_sci_lg"
 
 
 # These are the directories that the project needs. The project CLI will make
@@ -120,6 +125,9 @@ workflows:
     - evaluate-specialized-ner
     - package-ner
     - evaluate-package-ner
+  nel:
+    - create-umls-kb
+    - train-nel-lg
   all:
     - download
     - convert-shared
@@ -624,3 +632,24 @@ commands:
       - "packages/bionlp13cg_results.json"
       - "packages/craft_results.json"
       - "packages/jnlpba_results.json"
+
+  - name: "create-umls-kb"
+    help: "Create the spacy KB"
+    script:
+      - "python scripts/create_spacy_kb.py --kb_name umls --encoding_model_name ${vars.kb_encoding_model_name} --vocab_model_path ${vars.parser_tagger_lg_loc}/model-best --output_path ${vars.umls_kb_output_path} --device ${vars.device}"
+    deps:
+      - "${vars.parser_tagger_lg_loc}/model-best"
+    outputs:
+      - "${vars.umls_kb_output_path}"
+
+  - name: train-nel-lg
+    help: "Train the entity linker for the small model"
+    script:
+      - "spacy train ${vars.nel_config_loc} --output ${vars.nel_lg_loc} --code ${vars.code_loc} --vars.scispacy_kb_name umls --paths.vectors ${vars.vectors_lg_loc} --paths.parser_tagger_path ${vars.ner_lg_loc}/model-best --paths.ner_path ${vars.ner_lg_loc}/model-best --paths.vocab_path ${vars.vocab_lg_loc} --paths.kb_path ${vars.umls_kb_output_path} --vars.include_static_vectors True --gpu-id ${vars.gpu_id}"
+    deps:
+      - "${vars.nel_config_loc}"
+      - "${vars.ner_lg_loc}/model-best"
+      - "${vars.vocab_lg_loc}"
+      - "${vars.umls_kb_output_path}"
+    outputs:
+      - "${vars.nel_lg_loc}"
