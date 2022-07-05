@@ -5,11 +5,15 @@ import random
 import itertools
 import spacy
 import warnings
+import functools
 from spacy.training import Corpus, Example
 from spacy.language import Language
+from spacy.kb import KnowledgeBase as SpacyKnowledgeBase, Candidate
+from spacy.tokens import Span
 
 from scispacy.custom_tokenizer import combined_rule_tokenizer
 from scispacy.data_util import read_full_med_mentions, read_ner_from_tsv
+from scispacy.candidate_generation import CandidateGenerator
 
 
 def iter_sample(iterable: Iterable, sample_percent: float) -> Iterator:
@@ -88,10 +92,28 @@ def med_mentions_reader(
             raise Exception(f"Unexpected split {split}")
 
         for original_example in original_examples:
+            # import ipdb
+
+            # ipdb.set_trace()
             doc = nlp.make_doc(original_example[0])
+            if len(doc) < 2:
+                continue
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=UserWarning)
-                spacy_example = Example.from_dict(doc, original_example[1])
+                try:
+                    spacy_example = Example.from_dict(doc, original_example[1])
+                except:
+                    # remove the example if it does not align with the tokenization
+                    mistokenizations_to_delete = []
+                    for (start_char, end_char) in original_example[1]["links"].keys():
+                        if doc.char_span(start_char, end_char) is None:
+                            mistokenizations_to_delete.append((start_char, end_char))
+                    for (start_char, end_char) in mistokenizations_to_delete:
+                        del original_example[1]["links"][(start_char, end_char)]
+                        original_example[1]["entities"].remove(
+                            (start_char, end_char, "ENTITY")
+                        )
+                    spacy_example = Example.from_dict(doc, original_example[1])
             yield spacy_example
 
     return corpus
@@ -110,3 +132,40 @@ def specialized_ner_reader(file_path: str):
             yield spacy_example
 
     return corpus
+
+
+def scispacy_get_candidates(
+    scispacy_candidate_generator: CandidateGenerator,
+    spacy_kb: SpacyKnowledgeBase,
+    span: Span,
+) -> Iterator[Candidate]:
+    scispacy_candidates = sorted(
+        scispacy_candidate_generator([span.text], k=1)[0],
+        key=lambda x: max(x.similarities),
+        reverse=True,
+    )
+    for scispacy_candidate in scispacy_candidates:
+        # limited to UMLS entries with definitions
+        if not spacy_kb.contains_entity(scispacy_candidate.concept_id):
+            continue
+
+        entity_hash = spacy_kb.vocab.strings[scispacy_candidate.concept_id]
+        freq = 1
+        vector = spacy_kb.get_vector(scispacy_candidate.concept_id)
+        spacy_candidate = Candidate(
+            kb=spacy_kb,
+            entity_hash=entity_hash,
+            entity_freq=freq,
+            entity_vector=vector,
+            alias_hash=1,  # an integer is required here, but does not seem to be used anywhere
+            prior_prob=0.0,  # a float is required here, but is not used when incl_prior is False on the EntityLinker
+        )
+        yield spacy_candidate
+
+
+@spacy.registry.misc("scispacy_candidate_generator")
+def scispacy_get_candidate_generator(
+    scispacy_kb_name: str,
+) -> Callable[[SpacyKnowledgeBase, Span], Iterable[Candidate]]:
+    candidate_generator = CandidateGenerator(name=scispacy_kb_name)
+    return functools.partial(scispacy_get_candidates, candidate_generator)
