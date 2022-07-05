@@ -209,12 +209,23 @@ def read_full_med_mentions(
 
     for example in examples:
         spacy_format_entities = [
-            (x.start, x.end, label_function(x.mention_type)) for x in example.entities
+            (x.start, x.end, label_function(x.mention_type), x.umls_id)
+            for x in example.entities
         ]
         spacy_format_entities = remove_overlapping_entities(
             sorted(spacy_format_entities, key=lambda x: x[0])
         )
-        spacy_example = (example.text, {"entities": spacy_format_entities})
+
+        links_dict = {}
+        for start, end, _, umls_id in spacy_format_entities:
+            links_dict[(start, end)] = {umls_id: 1.0}
+        spacy_example = (
+            example.text,
+            {
+                "entities": [(x[0], x[1], x[2]) for x in spacy_format_entities],
+                "links": links_dict,
+            },
+        )
         if example.pubmed_id in train_ids:
             train_examples.append(spacy_example if spacy_format else example)
 
