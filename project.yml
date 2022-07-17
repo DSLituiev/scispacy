@@ -645,7 +645,7 @@ commands:
   - name: train-nel-lg
     help: "Train the entity linker for the small model"
     script:
-      - "spacy train ${vars.nel_config_loc} --output ${vars.nel_lg_loc} --code ${vars.code_loc} --vars.scispacy_kb_name umls --paths.vectors ${vars.vectors_lg_loc} --paths.parser_tagger_path ${vars.ner_lg_loc}/model-best --paths.ner_path ${vars.ner_lg_loc}/model-best --paths.vocab_path ${vars.vocab_lg_loc} --paths.kb_path ${vars.umls_kb_output_path} --vars.include_static_vectors True --gpu-id ${vars.gpu_id}"
+      - "spacy train ${vars.nel_config_loc} --output ${vars.nel_lg_loc} --code ${vars.code_loc} --vars.scispacy_kb_name umls --paths.vectors ${vars.vectors_lg_loc} --paths.parser_tagger_path ${vars.ner_lg_loc}/model-best --paths.ner_path ${vars.ner_lg_loc}/model-best --paths.vocab_path ${vars.vocab_lg_loc} --paths.kb_path ${vars.umls_kb_output_path} --vars.include_static_vectors True --gpu-id 0"
     deps:
       - "${vars.nel_config_loc}"
       - "${vars.ner_lg_loc}/model-best"

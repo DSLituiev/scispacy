@@ -75,11 +75,18 @@ def parser_tagger_data(
 
 @spacy.registry.readers("med_mentions_reader")
 def med_mentions_reader(
-    directory_path: str, split: str
+    directory_path: str,
+    split: str,
+    split_by_sents: bool = False,
+    sentence_splitting_nlp: Optional[str] = None,
 ) -> Callable[[Language], Iterator[Example]]:
     train, dev, test = read_full_med_mentions(
         directory_path, label_mapping=None, span_only=True, spacy_format=True
     )
+
+    base_nlp = None
+    if split_by_sents:
+        base_nlp = spacy.load(sentence_splitting_nlp)
 
     def corpus(nlp: Language) -> Iterator[Example]:
         if split == "train":
@@ -92,29 +99,36 @@ def med_mentions_reader(
             raise Exception(f"Unexpected split {split}")
 
         for original_example in original_examples:
-            # import ipdb
+            original_doc = nlp.make_doc(original_example[0])
 
-            # ipdb.set_trace()
-            doc = nlp.make_doc(original_example[0])
-            if len(doc) < 2:
-                continue
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=UserWarning)
-                try:
-                    spacy_example = Example.from_dict(doc, original_example[1])
-                except:
-                    # remove the example if it does not align with the tokenization
-                    mistokenizations_to_delete = []
-                    for (start_char, end_char) in original_example[1]["links"].keys():
-                        if doc.char_span(start_char, end_char) is None:
-                            mistokenizations_to_delete.append((start_char, end_char))
-                    for (start_char, end_char) in mistokenizations_to_delete:
-                        del original_example[1]["links"][(start_char, end_char)]
-                        original_example[1]["entities"].remove(
-                            (start_char, end_char, "ENTITY")
-                        )
-                    spacy_example = Example.from_dict(doc, original_example[1])
-            yield spacy_example
+            docs = []
+            if split_by_sents:
+                base_doc = base_nlp(original_example[0])
+                for sent in base_doc.sents:
+                    sent_doc = nlp.make_doc(sent.text)
+                    docs.append(sent_doc)
+            else:
+                docs = [original_doc]
+
+            for doc in docs:
+                if len(doc) < 2:
+                    continue
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    example_dict = {"entities": [], "links": {}}
+                    for key, value in original_example[1].items():
+                        if key not in {"entities", "links"}:
+                            example_dict[key] = value
+                    for (start_char, end_char, _) in original_example[1]["entities"]:
+                        if doc.char_span(start_char, end_char) is not None:
+                            example_dict["entities"].append(
+                                (start_char, end_char, "ENTITY")
+                            )
+                            example_dict["links"][
+                                (start_char, end_char)
+                            ] = original_example[1]["links"][(start_char, end_char)]
+                    spacy_example = Example.from_dict(doc, example_dict)
+                    yield spacy_example
 
     return corpus
 
@@ -140,7 +154,7 @@ def scispacy_get_candidates(
     span: Span,
 ) -> Iterator[Candidate]:
     scispacy_candidates = sorted(
-        scispacy_candidate_generator([span.text], k=1)[0],
+        scispacy_candidate_generator([span.text], k=30)[0],
         key=lambda x: max(x.similarities),
         reverse=True,
     )
