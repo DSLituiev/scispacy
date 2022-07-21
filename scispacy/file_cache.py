@@ -107,6 +107,10 @@ def get_from_cache(url: str, cache_dir: str = None) -> str:
     if cache_dir is None:
         cache_dir = DATASET_CACHE
 
+    cache_path = os.path.join(cache_dir, url.split("/")[-1])
+    if os.path.exists(cache_path):
+        return cache_path
+
     os.makedirs(cache_dir, exist_ok=True)
 
     response = requests.head(url, allow_redirects=True)
@@ -121,7 +125,7 @@ def get_from_cache(url: str, cache_dir: str = None) -> str:
     filename = url_to_filename(url, etag)
 
     # get cache path to put the file
-    cache_path = os.path.join(cache_dir, filename)
+    # cache_path = os.path.join(cache_dir, filename)
 
     if not os.path.exists(cache_path):
         # Download to temporary file, then copy to cache dir once finished.
