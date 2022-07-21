@@ -97,13 +97,14 @@ def construct_umls_tree_from_tsv(filepath: str) -> UmlsSemanticTypeTree:
     """
 
     node_stack: Deque[SemanticTypeNode] = deque()
-    for line in open(cached_path(filepath), "r"):
-        name, type_id, level = line.split("\t")
-        name = name.strip()
-        int_level = int(level.strip())
-        node = SemanticTypeNode(type_id, name, [], int_level)
+    with open(cached_path(filepath), "r") as fh:
+        for line in fh:
+            name, type_id, level = line.split("\t")
+            name = name.strip()
+            int_level = int(level.strip())
+            node = SemanticTypeNode(type_id, name, [], int_level)
 
-        node_stack.append(node)
+            node_stack.append(node)
 
     def attach_children(node: SemanticTypeNode, stack: Deque[SemanticTypeNode]):
         while stack and stack[0].level > node.level:

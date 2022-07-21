@@ -224,9 +224,12 @@ class CandidateGenerator:
         self.vectorizer = tfidf_vectorizer or joblib.load(
             cached_path(linker_paths.tfidf_vectorizer)
         )
-        self.ann_concept_aliases_list = ann_concept_aliases_list or json.load(
-            open(cached_path(linker_paths.concept_aliases_list))
-        )
+
+        if ann_concept_aliases_list:
+            self.ann_concept_aliases_list = ann_concept_aliases_list
+        else:
+            with open(cached_path(linker_paths.concept_aliases_list)) as fh:
+                self.ann_concept_aliases_list = json.load(fh)
 
         self.kb = kb or DEFAULT_KNOWLEDGE_BASES[name]()
         self.verbose = verbose
